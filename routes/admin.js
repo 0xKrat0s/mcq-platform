@@ -42,12 +42,12 @@ router.post('/login', (req, res, next) => {
     } else {
         next();
     }
-}, (req, res) => {
+}, async (req, res) => {
     const { username, password } = req.body;
     const ip = req.ip || req.connection.remoteAddress;
     const adminPath = getAdminPath(req);
 
-    const admin = db.get('SELECT * FROM admins WHERE username = ?', [username]);
+    const admin = await db.get('SELECT * FROM admins WHERE username = ?', [username]);
 
     if (admin && bcrypt.compareSync(password, admin.password)) {
         // Clear failed attempts on successful login
@@ -109,17 +109,17 @@ router.get('/settings', requireAdmin, (req, res) => {
 });
 
 // Change password POST
-router.post('/change-password', requireAdmin, (req, res) => {
+router.post('/change-password', requireAdmin, async (req, res) => {
     const { currentPassword, newPassword } = req.body;
 
-    const admin = db.get('SELECT * FROM admins WHERE id = ?', [req.session.adminId]);
+    const admin = await db.get('SELECT * FROM admins WHERE id = ?', [req.session.adminId]);
 
     if (!bcrypt.compareSync(currentPassword, admin.password)) {
         return res.status(400).json({ success: false, message: 'Current password is incorrect' });
     }
 
     const hashedPassword = bcrypt.hashSync(newPassword, 10);
-    db.run('UPDATE admins SET password = ? WHERE id = ?', [hashedPassword, req.session.adminId]);
+    await db.run('UPDATE admins SET password = ? WHERE id = ?', [hashedPassword, req.session.adminId]);
 
     res.json({ success: true, message: 'Password changed successfully' });
 });

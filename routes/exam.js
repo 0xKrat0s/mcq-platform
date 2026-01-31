@@ -4,7 +4,7 @@ const db = require('../database/db');
 const { v4: uuidv4 } = require('uuid');
 
 // Start exam - validate and create session
-router.post('/start', (req, res) => {
+router.post('/start', async (req, res) => {
     try {
         const { name, email, exam_code } = req.body;
 
@@ -19,70 +19,71 @@ router.post('/start', (req, res) => {
         }
 
         // Find exam
-        const exam = db.get('SELECT * FROM exams WHERE exam_code = ? AND is_active = 1', [exam_code.toUpperCase()]);
+        const exam = await db.get('SELECT * FROM exams WHERE exam_code = ? AND is_active = 1', [exam_code.toUpperCase()]);
 
-    if (!exam) {
-        return res.status(404).json({ success: false, message: 'Invalid exam code or exam is not active' });
-    }
+        if (!exam) {
+            return res.status(404).json({ success: false, message: 'Invalid exam code or exam is not active' });
+        }
 
-    // Check for duplicate attempts if enabled (using email as unique identifier)
-    if (exam.prevent_duplicate_attempts) {
-        const existingCandidate = db.get(`
-            SELECT * FROM candidates WHERE exam_id = ? AND email = ? AND is_submitted = 1
+        // Check for duplicate attempts if enabled (using email as unique identifier)
+        if (exam.prevent_duplicate_attempts) {
+            const existingCandidate = await db.get(`
+                SELECT * FROM candidates WHERE exam_id = ? AND email = ? AND is_submitted = 1
+            `, [exam.id, email.trim().toLowerCase()]);
+
+            if (existingCandidate) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'You have already taken this exam'
+                });
+            }
+        }
+
+        // Check if there's an ongoing session
+        const ongoingSession = await db.get(`
+            SELECT * FROM candidates WHERE exam_id = ? AND email = ? AND is_submitted = 0
         `, [exam.id, email.trim().toLowerCase()]);
 
-        if (existingCandidate) {
-            return res.status(400).json({
-                success: false,
-                message: 'You have already taken this exam'
-            });
+        let candidate;
+        let sessionToken;
+
+        if (ongoingSession) {
+            // Resume existing session
+            candidate = ongoingSession;
+            sessionToken = ongoingSession.session_token;
+        } else {
+            // Create new candidate session
+            sessionToken = uuidv4();
+            const totalMarksResult = await db.get('SELECT SUM(marks) as total FROM questions WHERE exam_id = ?', [exam.id]);
+            const totalMarks = totalMarksResult?.total || 0;
+
+            await db.run(`
+                INSERT INTO candidates (name, email, exam_id, session_token, start_time, total_marks)
+                VALUES (?, ?, ?, ?, datetime('now'), ?)
+            `, [name.trim(), email.trim().toLowerCase(), exam.id, sessionToken, totalMarks]);
+
+            // Retrieve the candidate by session token (more reliable than lastInsertRowid)
+            candidate = await db.get('SELECT * FROM candidates WHERE session_token = ?', [sessionToken]);
         }
-    }
 
-    // Check if there's an ongoing session
-    const ongoingSession = db.get(`
-        SELECT * FROM candidates WHERE exam_id = ? AND email = ? AND is_submitted = 0
-    `, [exam.id, email.trim().toLowerCase()]);
+        if (!candidate) {
+            return res.status(500).json({ success: false, message: 'Failed to create session. Please try again.' });
+        }
 
-    let candidate;
-    let sessionToken;
+        // Store in session
+        req.session.candidateId = candidate.id;
+        req.session.sessionToken = sessionToken;
 
-    if (ongoingSession) {
-        // Resume existing session
-        candidate = ongoingSession;
-        sessionToken = ongoingSession.session_token;
-    } else {
-        // Create new candidate session
-        sessionToken = uuidv4();
-        const totalMarks = db.get('SELECT SUM(marks) as total FROM questions WHERE exam_id = ?', [exam.id])?.total || 0;
-
-        db.run(`
-            INSERT INTO candidates (name, email, exam_id, session_token, start_time, total_marks)
-            VALUES (?, ?, ?, ?, datetime('now'), ?)
-        `, [name.trim(), email.trim().toLowerCase(), exam.id, sessionToken, totalMarks]);
-
-        // Retrieve the candidate by session token (more reliable than lastInsertRowid)
-        candidate = db.get('SELECT * FROM candidates WHERE session_token = ?', [sessionToken]);
-    }
-
-    if (!candidate) {
-        return res.status(500).json({ success: false, message: 'Failed to create session. Please try again.' });
-    }
-
-    // Store in session
-    req.session.candidateId = candidate.id;
-    req.session.sessionToken = sessionToken;
-
-    res.json({
-        success: true,
-        sessionToken,
-        examTitle: exam.title,
-        examCode: exam.exam_code,
-        duration: exam.duration_minutes,
-        allowBackNavigation: exam.allow_back_navigation,
-        resultMode: exam.result_mode,
-        startTime: candidate.start_time
-    });
+        res.json({
+            success: true,
+            sessionToken,
+            examTitle: exam.title,
+            examCode: exam.exam_code,
+            duration: exam.duration_minutes,
+            allowBackNavigation: exam.allow_back_navigation,
+            resultMode: exam.result_mode,
+            startTime: candidate.start_time
+        });
     } catch (error) {
         console.error('Error starting exam:', error);
         res.status(500).json({ success: false, message: 'Server error. Please try again.' });
@@ -90,7 +91,7 @@ router.post('/start', (req, res) => {
 });
 
 // Get questions for the exam
-router.get('/questions', (req, res) => {
+router.get('/questions', async (req, res) => {
     try {
         const candidateId = req.session.candidateId;
 
@@ -98,57 +99,57 @@ router.get('/questions', (req, res) => {
             return res.status(401).json({ success: false, message: 'Session expired. Please start again.' });
         }
 
-    const candidate = db.get(`
-        SELECT c.*, e.shuffle_questions, e.duration_minutes, e.allow_back_navigation
-        FROM candidates c
-        JOIN exams e ON c.exam_id = e.id
-        WHERE c.id = ?
-    `, [candidateId]);
+        const candidate = await db.get(`
+            SELECT c.*, e.shuffle_questions, e.duration_minutes, e.allow_back_navigation
+            FROM candidates c
+            JOIN exams e ON c.exam_id = e.id
+            WHERE c.id = ?
+        `, [candidateId]);
 
-    if (!candidate) {
-        return res.status(404).json({ success: false, message: 'Session not found' });
-    }
+        if (!candidate) {
+            return res.status(404).json({ success: false, message: 'Session not found' });
+        }
 
-    if (candidate.is_submitted) {
-        return res.status(400).json({ success: false, message: 'Exam already submitted' });
-    }
+        if (candidate.is_submitted) {
+            return res.status(400).json({ success: false, message: 'Exam already submitted' });
+        }
 
-    // Get questions (without correct answers)
-    let questions = db.all(`
-        SELECT id, question_text, option_a, option_b, option_c, option_d, marks, question_order
-        FROM questions
-        WHERE exam_id = ?
-        ORDER BY question_order, id
-    `, [candidate.exam_id]);
+        // Get questions (without correct answers)
+        let questions = await db.all(`
+            SELECT id, question_text, option_a, option_b, option_c, option_d, marks, question_order
+            FROM questions
+            WHERE exam_id = ?
+            ORDER BY question_order, id
+        `, [candidate.exam_id]);
 
-    // Shuffle if enabled
-    if (candidate.shuffle_questions) {
-        questions = shuffleArray(questions);
-    }
+        // Shuffle if enabled
+        if (candidate.shuffle_questions) {
+            questions = shuffleArray(questions);
+        }
 
-    // Get existing responses
-    const responses = db.all(`
-        SELECT question_id, selected_option FROM responses WHERE candidate_id = ?
-    `, [candidateId]);
+        // Get existing responses
+        const responses = await db.all(`
+            SELECT question_id, selected_option FROM responses WHERE candidate_id = ?
+        `, [candidateId]);
 
-    const responseMap = {};
-    responses.forEach(r => {
-        responseMap[r.question_id] = r.selected_option;
-    });
+        const responseMap = {};
+        responses.forEach(r => {
+            responseMap[r.question_id] = r.selected_option;
+        });
 
-    // Calculate remaining time
-    const startTime = new Date(candidate.start_time + 'Z');
-    const now = new Date();
-    const elapsedSeconds = Math.floor((now - startTime) / 1000);
-    const totalSeconds = candidate.duration_minutes * 60;
-    const remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
+        // Calculate remaining time
+        const startTime = new Date(candidate.start_time + 'Z');
+        const now = new Date();
+        const elapsedSeconds = Math.floor((now - startTime) / 1000);
+        const totalSeconds = candidate.duration_minutes * 60;
+        const remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
 
-    res.json({
-        questions,
-        responses: responseMap,
-        remainingSeconds,
-        allowBackNavigation: candidate.allow_back_navigation
-    });
+        res.json({
+            questions,
+            responses: responseMap,
+            remainingSeconds,
+            allowBackNavigation: candidate.allow_back_navigation
+        });
     } catch (error) {
         console.error('Error getting questions:', error);
         res.status(500).json({ success: false, message: 'Server error. Please try again.' });
@@ -156,7 +157,7 @@ router.get('/questions', (req, res) => {
 });
 
 // Save answer
-router.post('/answer', (req, res) => {
+router.post('/answer', async (req, res) => {
     try {
         const candidateId = req.session.candidateId;
         const { questionId, selectedOption } = req.body;
@@ -165,50 +166,50 @@ router.post('/answer', (req, res) => {
             return res.status(401).json({ success: false, message: 'Session expired' });
         }
 
-    const candidate = db.get('SELECT * FROM candidates WHERE id = ? AND is_submitted = 0', [candidateId]);
+        const candidate = await db.get('SELECT * FROM candidates WHERE id = ? AND is_submitted = 0', [candidateId]);
 
-    if (!candidate) {
-        return res.status(400).json({ success: false, message: 'Invalid session or exam already submitted' });
-    }
-
-    // Verify question belongs to this exam
-    const question = db.get('SELECT * FROM questions WHERE id = ? AND exam_id = ?', [questionId, candidate.exam_id]);
-
-    if (!question) {
-        return res.status(400).json({ success: false, message: 'Invalid question' });
-    }
-
-    // Get exam for negative marking
-    const exam = db.get('SELECT * FROM exams WHERE id = ?', [candidate.exam_id]);
-
-    // Check if answer is correct
-    const isCorrect = selectedOption && selectedOption.toUpperCase() === question.correct_option;
-    let marksObtained = 0;
-
-    if (selectedOption) {
-        if (isCorrect) {
-            marksObtained = question.marks;
-        } else if (exam.negative_marking > 0) {
-            marksObtained = -exam.negative_marking;
+        if (!candidate) {
+            return res.status(400).json({ success: false, message: 'Invalid session or exam already submitted' });
         }
-    }
 
-    // Check if response exists
-    const existingResponse = db.get('SELECT id FROM responses WHERE candidate_id = ? AND question_id = ?', [candidateId, questionId]);
+        // Verify question belongs to this exam
+        const question = await db.get('SELECT * FROM questions WHERE id = ? AND exam_id = ?', [questionId, candidate.exam_id]);
 
-    if (existingResponse) {
-        db.run(`
-            UPDATE responses SET selected_option = ?, is_correct = ?, marks_obtained = ?, answered_at = datetime('now')
-            WHERE candidate_id = ? AND question_id = ?
-        `, [selectedOption || null, isCorrect ? 1 : 0, marksObtained, candidateId, questionId]);
-    } else {
-        db.run(`
-            INSERT INTO responses (candidate_id, question_id, selected_option, is_correct, marks_obtained)
-            VALUES (?, ?, ?, ?, ?)
-        `, [candidateId, questionId, selectedOption || null, isCorrect ? 1 : 0, marksObtained]);
-    }
+        if (!question) {
+            return res.status(400).json({ success: false, message: 'Invalid question' });
+        }
 
-    res.json({ success: true });
+        // Get exam for negative marking
+        const exam = await db.get('SELECT * FROM exams WHERE id = ?', [candidate.exam_id]);
+
+        // Check if answer is correct
+        const isCorrect = selectedOption && selectedOption.toUpperCase() === question.correct_option;
+        let marksObtained = 0;
+
+        if (selectedOption) {
+            if (isCorrect) {
+                marksObtained = question.marks;
+            } else if (exam.negative_marking > 0) {
+                marksObtained = -exam.negative_marking;
+            }
+        }
+
+        // Check if response exists
+        const existingResponse = await db.get('SELECT id FROM responses WHERE candidate_id = ? AND question_id = ?', [candidateId, questionId]);
+
+        if (existingResponse) {
+            await db.run(`
+                UPDATE responses SET selected_option = ?, is_correct = ?, marks_obtained = ?, answered_at = datetime('now')
+                WHERE candidate_id = ? AND question_id = ?
+            `, [selectedOption || null, isCorrect ? 1 : 0, marksObtained, candidateId, questionId]);
+        } else {
+            await db.run(`
+                INSERT INTO responses (candidate_id, question_id, selected_option, is_correct, marks_obtained)
+                VALUES (?, ?, ?, ?, ?)
+            `, [candidateId, questionId, selectedOption || null, isCorrect ? 1 : 0, marksObtained]);
+        }
+
+        res.json({ success: true });
     } catch (error) {
         console.error('Error saving answer:', error);
         res.status(500).json({ success: false, message: 'Failed to save answer' });
@@ -216,7 +217,7 @@ router.post('/answer', (req, res) => {
 });
 
 // Submit exam
-router.post('/submit', (req, res) => {
+router.post('/submit', async (req, res) => {
     try {
         const candidateId = req.session.candidateId;
 
@@ -224,36 +225,36 @@ router.post('/submit', (req, res) => {
             return res.status(401).json({ success: false, message: 'Session expired' });
         }
 
-    const candidate = db.get('SELECT * FROM candidates WHERE id = ? AND is_submitted = 0', [candidateId]);
+        const candidate = await db.get('SELECT * FROM candidates WHERE id = ? AND is_submitted = 0', [candidateId]);
 
-    if (!candidate) {
-        return res.status(400).json({ success: false, message: 'Invalid session or exam already submitted' });
-    }
+        if (!candidate) {
+            return res.status(400).json({ success: false, message: 'Invalid session or exam already submitted' });
+        }
 
-    // Calculate final score
-    const scoreResult = db.get(`
-        SELECT COALESCE(SUM(marks_obtained), 0) as total_score
-        FROM responses
-        WHERE candidate_id = ?
-    `, [candidateId]);
+        // Calculate final score
+        const scoreResult = await db.get(`
+            SELECT COALESCE(SUM(marks_obtained), 0) as total_score
+            FROM responses
+            WHERE candidate_id = ?
+        `, [candidateId]);
 
-    const score = Math.max(0, scoreResult?.total_score || 0); // Don't allow negative total
+        const score = Math.max(0, scoreResult?.total_score || 0); // Don't allow negative total
 
-    // Update candidate
-    db.run(`
-        UPDATE candidates
-        SET is_submitted = 1, end_time = datetime('now'), score = ?
-        WHERE id = ?
-    `, [score, candidateId]);
+        // Update candidate
+        await db.run(`
+            UPDATE candidates
+            SET is_submitted = 1, end_time = datetime('now'), score = ?
+            WHERE id = ?
+        `, [score, candidateId]);
 
-    // Clear session
-    req.session.candidateId = null;
-    req.session.sessionToken = null;
+        // Clear session
+        req.session.candidateId = null;
+        req.session.sessionToken = null;
 
-    res.json({
-        success: true,
-        message: 'Exam submitted successfully'
-    });
+        res.json({
+            success: true,
+            message: 'Exam submitted successfully'
+        });
     } catch (error) {
         console.error('Error submitting exam:', error);
         res.status(500).json({ success: false, message: 'Failed to submit exam' });
@@ -261,8 +262,8 @@ router.post('/submit', (req, res) => {
 });
 
 // Check result (for user viewing their score)
-router.get('/result/:sessionToken', (req, res) => {
-    const candidate = db.get(`
+router.get('/result/:sessionToken', async (req, res) => {
+    const candidate = await db.get(`
         SELECT c.*, e.title as exam_title, e.result_mode, e.results_published
         FROM candidates c
         JOIN exams e ON c.exam_id = e.id
@@ -321,8 +322,8 @@ router.get('/result/:sessionToken', (req, res) => {
 });
 
 // Get leaderboard (for public result mode)
-router.get('/leaderboard/:examCode', (req, res) => {
-    const exam = db.get(`
+router.get('/leaderboard/:examCode', async (req, res) => {
+    const exam = await db.get(`
         SELECT * FROM exams WHERE exam_code = ?
     `, [req.params.examCode.toUpperCase()]);
 
@@ -334,7 +335,7 @@ router.get('/leaderboard/:examCode', (req, res) => {
         return res.status(403).json({ success: false, message: 'Leaderboard not available for this exam' });
     }
 
-    const leaderboard = db.all(`
+    const leaderboard = await db.all(`
         SELECT name, score, total_marks, end_time
         FROM candidates
         WHERE exam_id = ? AND is_submitted = 1

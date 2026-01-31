@@ -65,8 +65,8 @@ router.post('/upload-image', requireAdmin, (req, res) => {
 // ==================== EXAM APIs ====================
 
 // Get all exams
-router.get('/exams', requireAdmin, (req, res) => {
-    const exams = db.all(`
+router.get('/exams', requireAdmin, async (req, res) => {
+    const exams = await db.all(`
         SELECT e.*,
                (SELECT COUNT(*) FROM questions WHERE exam_id = e.id) as question_count,
                (SELECT COUNT(*) FROM candidates WHERE exam_id = e.id AND is_submitted = 1) as submission_count
@@ -77,8 +77,8 @@ router.get('/exams', requireAdmin, (req, res) => {
 });
 
 // Get single exam
-router.get('/exams/:id', requireAdmin, (req, res) => {
-    const exam = db.get('SELECT * FROM exams WHERE id = ?', [req.params.id]);
+router.get('/exams/:id', requireAdmin, async (req, res) => {
+    const exam = await db.get('SELECT * FROM exams WHERE id = ?', [req.params.id]);
     if (exam) {
         res.json(exam);
     } else {
@@ -87,7 +87,7 @@ router.get('/exams/:id', requireAdmin, (req, res) => {
 });
 
 // Create exam
-router.post('/exams', requireAdmin, (req, res) => {
+router.post('/exams', requireAdmin, async (req, res) => {
     const {
         title, exam_code, description, duration_minutes,
         marks_per_question, negative_marking, result_mode,
@@ -95,7 +95,7 @@ router.post('/exams', requireAdmin, (req, res) => {
     } = req.body;
 
     try {
-        const result = db.run(`
+        const result = await db.run(`
             INSERT INTO exams (title, exam_code, description, duration_minutes,
                               marks_per_question, negative_marking, result_mode,
                               allow_back_navigation, shuffle_questions, prevent_duplicate_attempts)
@@ -117,7 +117,7 @@ router.post('/exams', requireAdmin, (req, res) => {
 });
 
 // Update exam
-router.put('/exams/:id', requireAdmin, (req, res) => {
+router.put('/exams/:id', requireAdmin, async (req, res) => {
     const {
         title, exam_code, description, duration_minutes,
         marks_per_question, negative_marking, result_mode,
@@ -125,7 +125,7 @@ router.put('/exams/:id', requireAdmin, (req, res) => {
     } = req.body;
 
     try {
-        db.run(`
+        await db.run(`
             UPDATE exams SET
                 title = ?, exam_code = ?, description = ?, duration_minutes = ?,
                 marks_per_question = ?, negative_marking = ?, result_mode = ?,
@@ -146,16 +146,16 @@ router.put('/exams/:id', requireAdmin, (req, res) => {
 });
 
 // Delete exam
-router.delete('/exams/:id', requireAdmin, (req, res) => {
+router.delete('/exams/:id', requireAdmin, async (req, res) => {
     try {
         // Delete related data first (manual cascade for sql.js)
-        const questions = db.all('SELECT id FROM questions WHERE exam_id = ?', [req.params.id]);
-        questions.forEach(q => {
-            db.run('DELETE FROM responses WHERE question_id = ?', [q.id]);
-        });
-        db.run('DELETE FROM questions WHERE exam_id = ?', [req.params.id]);
-        db.run('DELETE FROM candidates WHERE exam_id = ?', [req.params.id]);
-        db.run('DELETE FROM exams WHERE id = ?', [req.params.id]);
+        const questions = await db.all('SELECT id FROM questions WHERE exam_id = ?', [req.params.id]);
+        for (const q of questions) {
+            await db.run('DELETE FROM responses WHERE question_id = ?', [q.id]);
+        }
+        await db.run('DELETE FROM questions WHERE exam_id = ?', [req.params.id]);
+        await db.run('DELETE FROM candidates WHERE exam_id = ?', [req.params.id]);
+        await db.run('DELETE FROM exams WHERE id = ?', [req.params.id]);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -163,10 +163,10 @@ router.delete('/exams/:id', requireAdmin, (req, res) => {
 });
 
 // Toggle exam active status
-router.post('/exams/:id/toggle-active', requireAdmin, (req, res) => {
-    const exam = db.get('SELECT is_active FROM exams WHERE id = ?', [req.params.id]);
+router.post('/exams/:id/toggle-active', requireAdmin, async (req, res) => {
+    const exam = await db.get('SELECT is_active FROM exams WHERE id = ?', [req.params.id]);
     if (exam) {
-        db.run('UPDATE exams SET is_active = ? WHERE id = ?', [exam.is_active ? 0 : 1, req.params.id]);
+        await db.run('UPDATE exams SET is_active = ? WHERE id = ?', [exam.is_active ? 0 : 1, req.params.id]);
         res.json({ success: true, is_active: !exam.is_active });
     } else {
         res.status(404).json({ success: false, message: 'Exam not found' });
@@ -174,37 +174,37 @@ router.post('/exams/:id/toggle-active', requireAdmin, (req, res) => {
 });
 
 // Publish results
-router.post('/exams/:id/publish-results', requireAdmin, (req, res) => {
-    db.run('UPDATE exams SET results_published = 1 WHERE id = ?', [req.params.id]);
+router.post('/exams/:id/publish-results', requireAdmin, async (req, res) => {
+    await db.run('UPDATE exams SET results_published = 1 WHERE id = ?', [req.params.id]);
     res.json({ success: true });
 });
 
 // Unpublish results
-router.post('/exams/:id/unpublish-results', requireAdmin, (req, res) => {
-    db.run('UPDATE exams SET results_published = 0 WHERE id = ?', [req.params.id]);
+router.post('/exams/:id/unpublish-results', requireAdmin, async (req, res) => {
+    await db.run('UPDATE exams SET results_published = 0 WHERE id = ?', [req.params.id]);
     res.json({ success: true });
 });
 
 // ==================== QUESTION APIs ====================
 
 // Get questions for an exam
-router.get('/exams/:examId/questions', requireAdmin, (req, res) => {
-    const questions = db.all(`
+router.get('/exams/:examId/questions', requireAdmin, async (req, res) => {
+    const questions = await db.all(`
         SELECT * FROM questions WHERE exam_id = ? ORDER BY question_order, id
     `, [req.params.examId]);
     res.json(questions);
 });
 
 // Add question
-router.post('/exams/:examId/questions', requireAdmin, (req, res) => {
+router.post('/exams/:examId/questions', requireAdmin, async (req, res) => {
     const { question_text, option_a, option_b, option_c, option_d, correct_option, marks } = req.body;
 
     // Get next order
-    const lastQuestion = db.get('SELECT MAX(question_order) as max_order FROM questions WHERE exam_id = ?', [req.params.examId]);
+    const lastQuestion = await db.get('SELECT MAX(question_order) as max_order FROM questions WHERE exam_id = ?', [req.params.examId]);
     const nextOrder = (lastQuestion?.max_order || 0) + 1;
 
     try {
-        const result = db.run(`
+        const result = await db.run(`
             INSERT INTO questions (exam_id, question_text, option_a, option_b, option_c, option_d, correct_option, marks, question_order)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [req.params.examId, question_text, option_a, option_b, option_c, option_d, correct_option.toUpperCase(), marks || 1, nextOrder]);
@@ -216,11 +216,11 @@ router.post('/exams/:examId/questions', requireAdmin, (req, res) => {
 });
 
 // Update question
-router.put('/questions/:id', requireAdmin, (req, res) => {
+router.put('/questions/:id', requireAdmin, async (req, res) => {
     const { question_text, option_a, option_b, option_c, option_d, correct_option, marks } = req.body;
 
     try {
-        db.run(`
+        await db.run(`
             UPDATE questions SET
                 question_text = ?, option_a = ?, option_b = ?, option_c = ?, option_d = ?,
                 correct_option = ?, marks = ?
@@ -234,10 +234,10 @@ router.put('/questions/:id', requireAdmin, (req, res) => {
 });
 
 // Delete question
-router.delete('/questions/:id', requireAdmin, (req, res) => {
+router.delete('/questions/:id', requireAdmin, async (req, res) => {
     try {
-        db.run('DELETE FROM responses WHERE question_id = ?', [req.params.id]);
-        db.run('DELETE FROM questions WHERE id = ?', [req.params.id]);
+        await db.run('DELETE FROM responses WHERE question_id = ?', [req.params.id]);
+        await db.run('DELETE FROM questions WHERE id = ?', [req.params.id]);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -247,8 +247,8 @@ router.delete('/questions/:id', requireAdmin, (req, res) => {
 // ==================== RESULTS APIs ====================
 
 // Get all candidates for an exam
-router.get('/exams/:examId/candidates', requireAdmin, (req, res) => {
-    const candidates = db.all(`
+router.get('/exams/:examId/candidates', requireAdmin, async (req, res) => {
+    const candidates = await db.all(`
         SELECT c.*,
                (SELECT COUNT(*) FROM responses WHERE candidate_id = c.id) as questions_answered
         FROM candidates c
@@ -259,8 +259,8 @@ router.get('/exams/:examId/candidates', requireAdmin, (req, res) => {
 });
 
 // Get candidate details with responses
-router.get('/candidates/:id', requireAdmin, (req, res) => {
-    const candidate = db.get(`
+router.get('/candidates/:id', requireAdmin, async (req, res) => {
+    const candidate = await db.get(`
         SELECT c.*, e.title as exam_title, e.exam_code
         FROM candidates c
         JOIN exams e ON c.exam_id = e.id
@@ -271,7 +271,7 @@ router.get('/candidates/:id', requireAdmin, (req, res) => {
         return res.status(404).json({ success: false, message: 'Candidate not found' });
     }
 
-    const responses = db.all(`
+    const responses = await db.all(`
         SELECT r.*, q.question_text, q.option_a, q.option_b, q.option_c, q.option_d, q.correct_option, q.marks
         FROM responses r
         JOIN questions q ON r.question_id = q.id
@@ -283,10 +283,10 @@ router.get('/candidates/:id', requireAdmin, (req, res) => {
 });
 
 // Delete candidate
-router.delete('/candidates/:id', requireAdmin, (req, res) => {
+router.delete('/candidates/:id', requireAdmin, async (req, res) => {
     try {
-        db.run('DELETE FROM responses WHERE candidate_id = ?', [req.params.id]);
-        db.run('DELETE FROM candidates WHERE id = ?', [req.params.id]);
+        await db.run('DELETE FROM responses WHERE candidate_id = ?', [req.params.id]);
+        await db.run('DELETE FROM candidates WHERE id = ?', [req.params.id]);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -294,9 +294,9 @@ router.delete('/candidates/:id', requireAdmin, (req, res) => {
 });
 
 // Export results as CSV
-router.get('/exams/:examId/export', requireAdmin, (req, res) => {
-    const exam = db.get('SELECT * FROM exams WHERE id = ?', [req.params.examId]);
-    const candidates = db.all(`
+router.get('/exams/:examId/export', requireAdmin, async (req, res) => {
+    const exam = await db.get('SELECT * FROM exams WHERE id = ?', [req.params.examId]);
+    const candidates = await db.all(`
         SELECT name, email, score, total_marks, start_time, end_time, is_submitted
         FROM candidates
         WHERE exam_id = ? AND is_submitted = 1
@@ -317,13 +317,13 @@ router.get('/exams/:examId/export', requireAdmin, (req, res) => {
 // ==================== SITE SETTINGS APIs ====================
 
 // Get site settings (public - for landing page)
-router.get('/site-settings', (req, res) => {
-    const settings = db.get('SELECT * FROM site_settings WHERE id = 1');
+router.get('/site-settings', async (req, res) => {
+    const settings = await db.get('SELECT * FROM site_settings WHERE id = 1');
     res.json(settings || {});
 });
 
 // Update site settings (admin only)
-router.put('/site-settings', requireAdmin, (req, res) => {
+router.put('/site-settings', requireAdmin, async (req, res) => {
     const {
         portal_title,
         portal_subtitle,
@@ -336,7 +336,7 @@ router.put('/site-settings', requireAdmin, (req, res) => {
     } = req.body;
 
     try {
-        db.run(`
+        await db.run(`
             UPDATE site_settings SET
                 portal_title = ?,
                 portal_subtitle = ?,
@@ -366,13 +366,18 @@ router.put('/site-settings', requireAdmin, (req, res) => {
 });
 
 // Dashboard stats
-router.get('/dashboard/stats', requireAdmin, (req, res) => {
-    const totalExams = db.get('SELECT COUNT(*) as count FROM exams')?.count || 0;
-    const activeExams = db.get('SELECT COUNT(*) as count FROM exams WHERE is_active = 1')?.count || 0;
-    const totalQuestions = db.get('SELECT COUNT(*) as count FROM questions')?.count || 0;
-    const totalSubmissions = db.get('SELECT COUNT(*) as count FROM candidates WHERE is_submitted = 1')?.count || 0;
+router.get('/dashboard/stats', requireAdmin, async (req, res) => {
+    const totalExamsResult = await db.get('SELECT COUNT(*) as count FROM exams');
+    const activeExamsResult = await db.get('SELECT COUNT(*) as count FROM exams WHERE is_active = 1');
+    const totalQuestionsResult = await db.get('SELECT COUNT(*) as count FROM questions');
+    const totalSubmissionsResult = await db.get('SELECT COUNT(*) as count FROM candidates WHERE is_submitted = 1');
 
-    const recentExams = db.all(`
+    const totalExams = totalExamsResult?.count || 0;
+    const activeExams = activeExamsResult?.count || 0;
+    const totalQuestions = totalQuestionsResult?.count || 0;
+    const totalSubmissions = totalSubmissionsResult?.count || 0;
+
+    const recentExams = await db.all(`
         SELECT e.*,
                (SELECT COUNT(*) FROM candidates WHERE exam_id = e.id AND is_submitted = 1) as submissions
         FROM exams e
