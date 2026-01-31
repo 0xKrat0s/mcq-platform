@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Results Overview - Admin Panel</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="./dashboard" class="navbar-brand">MCQ Admin</a>
+        <ul class="navbar-nav">
+            <li><a href="./dashboard">Dashboard</a></li>
+            <li><a href="./exams">Exams</a></li>
+            <li><a href="./results" class="active">Results</a></li>
+            <li><a href="./settings">Settings</a></li>
+            <li><a href="./logout">Logout</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Results Overview</h2>
+            </div>
+
+            <p class="text-muted mb-4">Select an exam to view detailed results and manage candidate submissions.</p>
+
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Exam Title</th>
+                            <th>Code</th>
+                            <th>Submissions</th>
+                            <th>Result Mode</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exams-table">
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadExams() {
+            try {
+                const response = await fetch('/api/exams');
+                const exams = await response.json();
+
+                const tbody = document.getElementById('exams-table');
+
+                if (exams.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No exams found</td></tr>';
+                    return;
+                }
+
+                const resultModeLabels = {
+                    'admin_only': 'Admin Only',
+                    'private': 'Private',
+                    'public': 'Public',
+                    'after_publish': 'After Publish'
+                };
+
+                tbody.innerHTML = exams.map(exam => `
+                    <tr>
+                        <td><strong>${exam.title}</strong></td>
+                        <td><code>${exam.exam_code}</code></td>
+                        <td>${exam.submission_count}</td>
+                        <td>
+                            <span class="badge badge-info">${resultModeLabels[exam.result_mode]}</span>
+                            ${exam.result_mode === 'after_publish' ?
+                                (exam.results_published ? '<span class="badge badge-success">Published</span>' : '<span class="badge badge-warning">Not Published</span>')
+                                : ''}
+                        </td>
+                        <td class="actions">
+                            <a href="./results/${exam.id}" class="btn btn-sm btn-primary">View Results</a>
+                            ${exam.result_mode === 'after_publish' ?
+                                (exam.results_published ?
+                                    `<button class="btn btn-sm btn-warning" onclick="unpublishResults(${exam.id})">Unpublish</button>` :
+                                    `<button class="btn btn-sm btn-success" onclick="publishResults(${exam.id})">Publish Results</button>`)
+                                : ''}
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load exams:', error);
+            }
+        }
+
+        async function publishResults(examId) {
+            try {
+                await fetch(`/api/exams/${examId}/publish-results`, { method: 'POST' });
+                loadExams();
+            } catch (error) {
+                alert('Failed to publish results');
+            }
+        }
+
+        async function unpublishResults(examId) {
+            try {
+                await fetch(`/api/exams/${examId}/unpublish-results`, { method: 'POST' });
+                loadExams();
+            } catch (error) {
+                alert('Failed to unpublish results');
+            }
+        }
+
+        loadExams();
+    </script>
+</body>
+</html>

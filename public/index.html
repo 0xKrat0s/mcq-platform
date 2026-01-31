@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCQ Exam Platform</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .branding-header {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .branding-logo {
+            max-height: 60px;
+            max-width: 120px;
+            object-fit: contain;
+        }
+        .branding-logo.hidden {
+            display: none;
+        }
+        .org-name {
+            font-size: 14px;
+            color: #78716c;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+        .branding-footer {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e7e5e4;
+            text-align: center;
+            font-size: 13px;
+            color: #a8a29e;
+        }
+        .branding-footer a {
+            color: #78716c;
+            text-decoration: none;
+            display: block;
+            margin-top: 6px;
+        }
+        .branding-footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="entry-container">
+        <div class="entry-card">
+            <!-- Logo Header -->
+            <div class="branding-header" id="branding-header" style="display: none;">
+                <img id="company-logo" class="branding-logo hidden" alt="Company Logo">
+            </div>
+
+            <!-- Organization Name -->
+            <div id="org-names" style="display: none;">
+                <p class="org-name" id="company-name-display"></p>
+            </div>
+
+            <h1 id="portal-title">Exam Portal</h1>
+            <p class="subtitle" id="portal-subtitle">Enter your details to begin</p>
+
+            <div id="alert-container"></div>
+
+            <form id="entry-form">
+                <div class="form-group">
+                    <label class="form-label" for="name">Full Name</label>
+                    <input type="text" class="form-control" id="name" name="name" placeholder="Enter your full name" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="email">Email ID</label>
+                    <input type="email" class="form-control" id="email" name="email" placeholder="Enter your email address" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="exam_code">Exam Code</label>
+                    <input type="text" class="form-control" id="exam_code" name="exam_code" placeholder="e.g., JAVA-101" required style="text-transform: uppercase;">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
+                    Start Exam
+                </button>
+            </form>
+
+            <p class="mt-4 text-muted" style="font-size: 13px;">
+                Ensure you have a stable internet connection before starting.
+            </p>
+
+            <div class="mt-4" style="padding-top: 1rem; border-top: 1px solid #e7e5e4; text-align: center;">
+                <a href="/leaderboard.html" class="text-link">View Leaderboard</a>
+            </div>
+
+            <!-- Branding Footer -->
+            <div class="branding-footer" id="branding-footer" style="display: none;">
+                <div id="footer-text-display"></div>
+                <a id="company-website-link" href="#" target="_blank" style="display: none;"></a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load branding settings
+        async function loadBranding() {
+            try {
+                const response = await fetch('/api/site-settings');
+                const settings = await response.json();
+
+                // Update title
+                if (settings.portal_title) {
+                    document.getElementById('portal-title').textContent = settings.portal_title;
+                    document.title = settings.portal_title;
+                }
+
+                // Update subtitle
+                if (settings.portal_subtitle) {
+                    document.getElementById('portal-subtitle').textContent = settings.portal_subtitle;
+                }
+
+                // Show logo
+                if (settings.company_logo) {
+                    const companyLogo = document.getElementById('company-logo');
+                    companyLogo.src = settings.company_logo;
+                    companyLogo.classList.remove('hidden');
+                    document.getElementById('branding-header').style.display = 'flex';
+                }
+
+                // Show company name
+                if (settings.company_name) {
+                    document.getElementById('company-name-display').textContent = settings.company_name;
+                    document.getElementById('org-names').style.display = 'block';
+                }
+
+                // Show footer
+                const brandingFooter = document.getElementById('branding-footer');
+                let hasFooter = false;
+
+                if (settings.footer_text) {
+                    document.getElementById('footer-text-display').textContent = settings.footer_text;
+                    hasFooter = true;
+                }
+
+                if (settings.company_website) {
+                    const link = document.getElementById('company-website-link');
+                    link.href = settings.company_website;
+                    link.textContent = settings.company_name ? `Visit ${settings.company_name}` : 'Visit Website';
+                    link.style.display = 'inline';
+                    hasFooter = true;
+                }
+
+                if (hasFooter) {
+                    brandingFooter.style.display = 'block';
+                }
+
+            } catch (error) {
+                console.error('Failed to load branding:', error);
+            }
+        }
+
+        // Load branding on page load
+        loadBranding();
+
+        document.getElementById('entry-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const name = document.getElementById('name').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const exam_code = document.getElementById('exam_code').value.trim().toUpperCase();
+            const alertContainer = document.getElementById('alert-container');
+
+            if (!name || !email || !exam_code) {
+                alertContainer.innerHTML = '<div class="alert alert-danger">Please fill in all fields</div>';
+                return;
+            }
+
+            const btn = this.querySelector('button');
+            btn.disabled = true;
+            btn.innerHTML = 'Starting...';
+
+            try {
+                const response = await fetch('/exam/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, exam_code })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    sessionStorage.setItem('sessionToken', data.sessionToken);
+                    sessionStorage.setItem('examTitle', data.examTitle);
+                    sessionStorage.setItem('examCode', data.examCode);
+                    sessionStorage.setItem('duration', data.duration);
+                    sessionStorage.setItem('allowBackNavigation', data.allowBackNavigation);
+                    sessionStorage.setItem('resultMode', data.resultMode);
+                    sessionStorage.setItem('startTime', data.startTime);
+
+                    window.location.href = '/exam.html';
+                } else {
+                    alertContainer.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
+                    btn.disabled = false;
+                    btn.innerHTML = 'Start Exam';
+                }
+            } catch (error) {
+                alertContainer.innerHTML = '<div class="alert alert-danger">An error occurred. Please try again.</div>';
+                btn.disabled = false;
+                btn.innerHTML = 'Start Exam';
+            }
+        });
+    </script>
+</body>
+</html>

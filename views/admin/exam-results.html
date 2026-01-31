@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Results - Admin Panel</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="../dashboard" class="navbar-brand">MCQ Admin</a>
+        <ul class="navbar-nav">
+            <li><a href="../dashboard">Dashboard</a></li>
+            <li><a href="../exams">Exams</a></li>
+            <li><a href="../results" class="active">Results</a></li>
+            <li><a href="../settings">Settings</a></li>
+            <li><a href="../logout">Logout</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <a href="../results" class="text-muted">&larr; Back to Results</a>
+                    <h2 class="card-title mt-2" id="exam-title">Loading...</h2>
+                    <p class="text-muted" id="exam-code"></p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline" onclick="exportCSV()">
+                        &#128190; Export CSV
+                    </button>
+                </div>
+            </div>
+
+            <div class="stats-grid mb-4">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-submissions">0</div>
+                    <div class="stat-label">Total Submissions</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="avg-score">0%</div>
+                    <div class="stat-label">Average Score</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="highest-score">0</div>
+                    <div class="stat-label">Highest Score</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="lowest-score">0</div>
+                    <div class="stat-label">Lowest Score</div>
+                </div>
+            </div>
+
+            <div id="alert-container"></div>
+
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Score</th>
+                            <th>Percentage</th>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="candidates-table">
+                        <tr>
+                            <td colspan="8" class="text-center text-muted">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="empty-state" class="empty-state hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <h3>No Submissions Yet</h3>
+                <p>No candidates have taken this exam yet</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="delete-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Delete Submission</h3>
+                <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+            </div>
+            <p>Are you sure you want to delete this candidate's submission?</p>
+            <p class="text-danger"><strong>This action cannot be undone.</strong></p>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeDeleteModal()">Cancel</button>
+                <button class="btn btn-danger" id="confirm-delete-btn">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const examId = window.location.pathname.split('/').pop();
+        let exam = null;
+        let candidates = [];
+        let deletingId = null;
+
+        async function loadExam() {
+            try {
+                const response = await fetch(`/api/exams/${examId}`);
+                exam = await response.json();
+
+                document.getElementById('exam-title').textContent = exam.title;
+                document.getElementById('exam-code').textContent = `Code: ${exam.exam_code}`;
+                document.title = `Results - ${exam.title}`;
+            } catch (error) {
+                console.error('Failed to load exam:', error);
+            }
+        }
+
+        async function loadCandidates() {
+            try {
+                const response = await fetch(`/api/exams/${examId}/candidates`);
+                candidates = await response.json();
+                renderCandidates();
+                calculateStats();
+            } catch (error) {
+                console.error('Failed to load candidates:', error);
+            }
+        }
+
+        function renderCandidates() {
+            const tbody = document.getElementById('candidates-table');
+            const emptyState = document.getElementById('empty-state');
+
+            const submitted = candidates.filter(c => c.is_submitted);
+
+            if (submitted.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+
+            tbody.innerHTML = submitted.map((c, index) => {
+                const percentage = c.total_marks > 0 ? ((c.score / c.total_marks) * 100).toFixed(1) : 0;
+                const startTime = c.start_time ? new Date(c.start_time + 'Z').toLocaleString() : '-';
+                const endTime = c.end_time ? new Date(c.end_time + 'Z').toLocaleString() : '-';
+
+                let rankDisplay = index + 1;
+                if (index === 0) rankDisplay = '&#129351;';
+                else if (index === 1) rankDisplay = '&#129352;';
+                else if (index === 2) rankDisplay = '&#129353;';
+
+                return `
+                    <tr>
+                        <td><strong>${rankDisplay}</strong></td>
+                        <td>${c.name}</td>
+                        <td>${c.email || '-'}</td>
+                        <td>${c.score}/${c.total_marks}</td>
+                        <td>
+                            <span class="badge ${percentage >= 70 ? 'badge-success' : percentage >= 40 ? 'badge-warning' : 'badge-danger'}">
+                                ${percentage}%
+                            </span>
+                        </td>
+                        <td>${startTime}</td>
+                        <td>${endTime}</td>
+                        <td class="actions">
+                            <a href="../candidate/${c.id}" class="btn btn-sm btn-outline">View</a>
+                            <button class="btn btn-sm btn-danger" onclick="confirmDelete(${c.id})">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function calculateStats() {
+            const submitted = candidates.filter(c => c.is_submitted);
+
+            document.getElementById('total-submissions').textContent = submitted.length;
+
+            if (submitted.length === 0) {
+                document.getElementById('avg-score').textContent = '0%';
+                document.getElementById('highest-score').textContent = '0';
+                document.getElementById('lowest-score').textContent = '0';
+                return;
+            }
+
+            const scores = submitted.map(c => c.score);
+            const totalMarks = submitted[0]?.total_marks || 1;
+            const avgPercentage = ((scores.reduce((a, b) => a + b, 0) / submitted.length / totalMarks) * 100).toFixed(1);
+            const highest = Math.max(...scores);
+            const lowest = Math.min(...scores);
+
+            document.getElementById('avg-score').textContent = `${avgPercentage}%`;
+            document.getElementById('highest-score').textContent = `${highest}/${totalMarks}`;
+            document.getElementById('lowest-score').textContent = `${lowest}/${totalMarks}`;
+        }
+
+        function exportCSV() {
+            window.location.href = `/api/exams/${examId}/export`;
+        }
+
+        function confirmDelete(id) {
+            deletingId = id;
+            document.getElementById('delete-modal').classList.add('active');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-modal').classList.remove('active');
+        }
+
+        document.getElementById('confirm-delete-btn').addEventListener('click', async function() {
+            if (!deletingId) return;
+
+            try {
+                const response = await fetch(`/api/candidates/${deletingId}`, { method: 'DELETE' });
+                const result = await response.json();
+
+                if (result.success) {
+                    closeDeleteModal();
+                    loadCandidates();
+                }
+            } catch (error) {
+                alert('Failed to delete submission');
+            }
+        });
+
+        loadExam();
+        loadCandidates();
+    </script>
+</body>
+</html>
