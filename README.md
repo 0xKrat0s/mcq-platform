@@ -1,135 +1,98 @@
-# MCQ Exam Platform
+# MCQ Exam Platform (Static Version)
 
-A complete MCQ examination platform with admin control panel and user exam interface.
+A simple and powerful platform for conducting MCQ-based examinations. This is a fully static version that runs entirely in the browser using localStorage for data persistence.
 
 ## Features
 
-### Admin Panel
-- Create and manage exams with customizable settings
-- Add, edit, and delete questions
-- View detailed results and analytics
-- Export results to CSV
-- Four result visibility modes:
-  - **Admin Only** - Only admin can see results
-  - **Private** - Only the candidate can see their own score
-  - **Public Leaderboard** - Everyone can see all scores
-  - **Publish Later** - Admin decides when to publish results
-
-### User Interface
-- Simple exam entry with name and exam code
-- Timer with auto-submit when time ends
-- Question navigation with progress indicators
-- Mobile-responsive design
-
-### Exam Settings
-- Configurable duration
-- Enable/disable back navigation
-- Shuffle questions per candidate
+- Create and manage multiple exams
+- Rich question editor with Markdown support
+- Flexible result visibility modes (Admin Only, Private, Public, Publish Later)
+- Timer with auto-submit functionality
 - Prevent duplicate attempts
-- Negative marking support
+- Detailed analytics and CSV export
+- Responsive design for all devices
+- No server required - runs on GitHub Pages
 
-## Installation
+## Quick Start
 
-1. Make sure you have [Node.js](https://nodejs.org/) installed (v14 or higher)
+1. Open `index.html` in your browser, or deploy to GitHub Pages
+2. Access the admin panel at `/admin/`
+3. Default admin credentials: `admin` / `admin123`
 
-2. Navigate to the project directory:
-   ```bash
-   cd mcq-exam-platform
-   ```
+## Deployment
 
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
+### GitHub Pages
 
-4. Start the server:
-   ```bash
-   npm start
-   ```
+1. Push this repository to GitHub
+2. Go to Settings > Pages
+3. Enable GitHub Pages from the main branch
+4. Your exam platform will be live at `https://<username>.github.io/<repo>/`
 
-   Or for development with auto-reload:
-   ```bash
-   npm run dev
-   ```
+The included GitHub Actions workflow (`.github/workflows/deploy.yml`) will automatically deploy on push to main.
 
-5. Open your browser:
-   - **User Portal**: http://localhost:3000
-   - **Admin Panel**: http://localhost:3000/admin
+### Other Static Hosting
 
-## Default Admin Credentials
+Simply upload all files to any static hosting service (Netlify, Vercel, Cloudflare Pages, etc.).
 
-- **Username**: admin
-- **Password**: admin123
-
-**Important**: Change the default password after first login!
-
-## Project Structure
+## File Structure
 
 ```
-mcq-exam-platform/
-├── database/
-│   └── db.js              # SQLite database setup
-├── public/
-│   ├── css/
-│   │   └── style.css      # All styles
-│   ├── index.html         # User entry page
-│   ├── exam.html          # Exam taking interface
-│   ├── submitted.html     # Post-submission page
-│   └── leaderboard.html   # Public leaderboard
-├── routes/
-│   ├── admin.js           # Admin routes
-│   ├── api.js             # API endpoints
-│   └── exam.js            # Exam/user routes
-├── views/
-│   └── admin/
-│       ├── login.html
-│       ├── dashboard.html
-│       ├── exams.html
-│       ├── questions.html
-│       ├── results.html
-│       ├── exam-results.html
-│       ├── candidate-detail.html
-│       └── settings.html
-├── package.json
-├── server.js              # Main server file
-└── README.md
+/mcq-exam-platform/
+├── index.html              # User entry page
+├── exam.html               # Exam taking interface
+├── submitted.html          # Results page
+├── leaderboard.html        # Public leaderboard
+├── admin/                  # Admin panel
+│   ├── index.html          # Login page
+│   ├── dashboard.html      # Dashboard
+│   ├── exams.html          # Exam management
+│   ├── questions.html      # Question editor
+│   ├── results.html        # Results overview
+│   ├── exam-results.html   # Exam-specific results
+│   ├── candidate-detail.html # Candidate responses
+│   └── settings.html       # Portal settings
+├── css/
+│   └── style.css           # Styles
+├── js/
+│   ├── utils.js            # Utility functions
+│   ├── storage.js          # localStorage wrapper
+│   ├── auth.js             # Authentication
+│   └── api.js              # API layer
+├── .github/
+│   └── workflows/
+│       └── deploy.yml      # GitHub Pages deployment
+└── .nojekyll               # Disable Jekyll processing
 ```
 
-## Result Visibility Modes Explained
+## Data Storage
 
-| Mode | Description |
-|------|-------------|
-| Admin Only | No user can see their score. Only admin can view all results. |
-| Private | Each user can only see their own score after submission. |
-| Public | All users can see a leaderboard with everyone's scores. |
-| Publish Later | No one sees scores until admin clicks "Publish Results". |
+All data is stored in the browser's localStorage:
 
-## Tech Stack
+- `mcq_exams` - Exam configurations
+- `mcq_questions` - Questions for each exam
+- `mcq_candidates` - Candidate registrations
+- `mcq_responses` - Candidate answers
+- `mcq_settings` - Portal branding settings
+- `mcq_admins` - Admin accounts
 
-- **Backend**: Node.js + Express
-- **Database**: SQLite (using better-sqlite3)
-- **Frontend**: Vanilla HTML, CSS, JavaScript
-- **Authentication**: express-session + bcryptjs
+**Note:** Clearing browser data will erase all exams, questions, and results. Data is stored per-browser and is not shared across devices.
 
-## API Endpoints
+## Limitations
 
-### Admin APIs
-- `GET /api/exams` - List all exams
-- `POST /api/exams` - Create exam
-- `PUT /api/exams/:id` - Update exam
-- `DELETE /api/exams/:id` - Delete exam
-- `GET /api/exams/:id/questions` - Get questions
-- `POST /api/exams/:id/questions` - Add question
-- `GET /api/exams/:id/candidates` - Get candidates
-- `GET /api/exams/:id/export` - Export results CSV
+Compared to the server-based version:
 
-### User APIs
-- `POST /exam/start` - Start exam session
-- `GET /exam/questions` - Get exam questions
-- `POST /exam/answer` - Save answer
-- `POST /exam/submit` - Submit exam
-- `GET /exam/result/:token` - Check result
-- `GET /exam/leaderboard/:code` - Get leaderboard
+| Feature | Server Version | Static Version |
+|---------|---------------|----------------|
+| Security | Server-side auth | Client-side (visible in browser) |
+| Data persistence | Database | localStorage (~5MB limit) |
+| Multi-device sync | Shared database | Per-browser storage |
+| Question hiding | Server returns w/o answers | Answers visible in dev tools |
+
+This static version is ideal for:
+- Personal use
+- Small-scale exams
+- Demonstrations
+- Quick deployments without server setup
 
 ## License
 

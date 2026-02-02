@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Submitted</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="result-container">
+        <div class="result-card">
+            <div class="result-icon">&#10003;</div>
+            <h1>Submission Complete</h1>
+            <p class="text-muted">Your responses have been recorded successfully.</p>
+
+            <div id="result-section" class="hidden">
+                <div class="result-details">
+                    <div class="result-label">Your Score</div>
+                    <div class="result-score" id="score-display">0/0</div>
+                    <div class="result-percentage" id="percentage-display">0%</div>
+                </div>
+            </div>
+
+            <div id="waiting-section" class="hidden">
+                <div class="result-details">
+                    <p id="result-message"></p>
+                </div>
+            </div>
+
+            <div id="action-buttons" class="mt-4">
+                <!-- Buttons will be dynamically inserted based on result mode -->
+            </div>
+
+            <div class="mt-4" style="padding-top: 1rem; border-top: 1px solid #e7e5e4; display: flex; justify-content: center; gap: 1.5rem;">
+                <a href="leaderboard.html" class="text-link">Leaderboard</a>
+                <a href="index.html" class="text-link">New Exam</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load JS modules -->
+    <script src="js/utils.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/api.js"></script>
+
+    <script>
+        const examCode = sessionStorage.getItem('examCode');
+        const sessionToken = sessionStorage.getItem('sessionToken');
+
+        function checkAndShowResult() {
+            const waitingSection = document.getElementById('waiting-section');
+
+            if (!sessionToken) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            // Get result from client-side API
+            const data = api.getResult(sessionToken);
+
+            if (data.success && data.canView) {
+                // Show the score
+                document.getElementById('result-section').classList.remove('hidden');
+                document.getElementById('score-display').textContent = `${data.score}/${data.totalMarks}`;
+                document.getElementById('percentage-display').textContent = `${data.percentage}%`;
+            } else if (data.success && !data.canView) {
+                // Results not available to view
+                waitingSection.classList.remove('hidden');
+                document.getElementById('result-message').textContent =
+                    data.message || 'Results are managed by the administrator.';
+            } else {
+                waitingSection.classList.remove('hidden');
+                document.getElementById('result-message').textContent =
+                    data.message || 'Unable to load results.';
+            }
+        }
+
+        // Initialize
+        checkAndShowResult();
+    </script>
+</body>
+</html>

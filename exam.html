@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam - MCQ Platform</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .markdown-body { line-height: 1.6; }
+        .markdown-body img { max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0; }
+        .markdown-body code { background: #f5f5f4; padding: 2px 5px; border-radius: 3px; font-size: 0.875em; color: #44403c; }
+        .markdown-body pre { background: #292524; color: #e7e5e4; padding: 12px; border-radius: 6px; overflow-x: auto; }
+        .markdown-body pre code { background: none; padding: 0; color: inherit; }
+        .markdown-body blockquote { border-left: 3px solid #d6d3d1; margin: 8px 0; padding: 8px 12px; color: #57534e; }
+        .markdown-body table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+        .markdown-body th, .markdown-body td { border: 1px solid #e7e5e4; padding: 8px 10px; text-align: left; }
+        .markdown-body th { background: #f5f5f4; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="exam-header">
+        <div class="exam-header-content">
+            <div>
+                <div class="exam-title" id="exam-title">Loading...</div>
+                <div class="text-muted" id="question-counter">Question 1 of 0</div>
+            </div>
+            <div class="exam-timer" id="timer">00:00</div>
+        </div>
+    </div>
+
+    <div class="exam-container">
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+        </div>
+
+        <div id="exam-content" class="hidden">
+            <div class="question-card">
+                <div class="question-number" id="question-number">Question 1</div>
+                <div class="question-text markdown-body" id="question-text"></div>
+
+                <div class="options-list" id="options-list">
+                    <!-- Options will be rendered here -->
+                </div>
+
+                <div class="exam-navigation">
+                    <button class="btn btn-outline" id="prev-btn" onclick="previousQuestion()">
+                        &larr; Previous
+                    </button>
+                    <button class="btn btn-primary" id="next-btn" onclick="nextQuestion()">
+                        Next &rarr;
+                    </button>
+                    <button class="btn btn-success hidden" id="submit-btn" onclick="submitExam()">
+                        Submit Exam
+                    </button>
+                </div>
+            </div>
+
+            <div class="question-indicators" id="question-indicators">
+                <!-- Question indicators will be rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Submit Confirmation Modal -->
+    <div class="modal-overlay" id="submit-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Submit Exam?</h3>
+                <button class="modal-close" onclick="closeSubmitModal()">&times;</button>
+            </div>
+            <div>
+                <p>Are you sure you want to submit your exam?</p>
+                <p class="mt-2 text-muted" id="submit-stats"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeSubmitModal()">Review Answers</button>
+                <button class="btn btn-success" onclick="confirmSubmit()">Yes, Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time's Up Modal -->
+    <div class="modal-overlay" id="timeout-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Time's Up!</h3>
+            </div>
+            <div class="text-center">
+                <div style="font-size: 48px;">&#9200;</div>
+                <p class="mt-3">Your time has ended. The exam will be automatically submitted.</p>
+            </div>
+            <div class="modal-footer" style="justify-content: center;">
+                <button class="btn btn-primary" onclick="confirmSubmit()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+
+    <!-- Load JS modules -->
+    <script src="js/utils.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/api.js"></script>
+
+    <script>
+        let questions = [];
+        let responses = {};
+        let currentIndex = 0;
+        let remainingSeconds = 0;
+        let timerInterval = null;
+        let allowBackNavigation = true;
+        let sessionToken = null;
+
+        // Render markdown safely
+        function renderMarkdown(text) {
+            if (!text) return '';
+            const rawHtml = marked.parse(text);
+            return DOMPurify.sanitize(rawHtml);
+        }
+
+        // Initialize exam
+        function initExam() {
+            sessionToken = sessionStorage.getItem('sessionToken');
+
+            if (!sessionToken) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            document.getElementById('exam-title').textContent = sessionStorage.getItem('examTitle') || 'Exam';
+
+            // Get exam data from client-side API
+            const data = api.getExamQuestions(sessionToken);
+
+            if (!data.success || !data.questions) {
+                alert(data.message || 'Failed to load exam');
+                window.location.href = 'index.html';
+                return;
+            }
+
+            questions = data.questions;
+            responses = data.responses || {};
+            remainingSeconds = data.remainingSeconds;
+            allowBackNavigation = data.allowBackNavigation;
+
+            if (questions.length === 0) {
+                alert('No questions found in this exam');
+                window.location.href = 'index.html';
+                return;
+            }
+
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('exam-content').classList.remove('hidden');
+
+            renderQuestionIndicators();
+            renderQuestion();
+            startTimer();
+
+            if (!allowBackNavigation) {
+                document.getElementById('prev-btn').style.display = 'none';
+            }
+        }
+
+        function renderQuestionIndicators() {
+            const container = document.getElementById('question-indicators');
+            container.innerHTML = '';
+
+            questions.forEach((q, index) => {
+                const indicator = document.createElement('div');
+                indicator.className = 'question-indicator';
+                indicator.textContent = index + 1;
+                indicator.onclick = () => {
+                    if (allowBackNavigation || index > currentIndex) {
+                        goToQuestion(index);
+                    }
+                };
+
+                if (responses[q.id]) {
+                    indicator.classList.add('answered');
+                }
+
+                container.appendChild(indicator);
+            });
+
+            updateIndicators();
+        }
+
+        function updateIndicators() {
+            const indicators = document.querySelectorAll('.question-indicator');
+            indicators.forEach((ind, index) => {
+                ind.classList.remove('current');
+                if (index === currentIndex) {
+                    ind.classList.add('current');
+                }
+                if (responses[questions[index].id]) {
+                    ind.classList.add('answered');
+                } else {
+                    ind.classList.remove('answered');
+                }
+            });
+        }
+
+        function renderQuestion() {
+            const question = questions[currentIndex];
+            const total = questions.length;
+
+            document.getElementById('question-counter').textContent = `Question ${currentIndex + 1} of ${total}`;
+            document.getElementById('question-number').textContent = `Question ${currentIndex + 1}`;
+            document.getElementById('question-text').innerHTML = renderMarkdown(question.question_text);
+
+            const optionsHtml = ['A', 'B', 'C', 'D'].map(opt => {
+                const optionKey = `option_${opt.toLowerCase()}`;
+                const isSelected = responses[question.id] === opt;
+                return `
+                    <label class="option-item ${isSelected ? 'selected' : ''}" onclick="selectOption('${opt}')">
+                        <input type="radio" name="answer" value="${opt}" ${isSelected ? 'checked' : ''}>
+                        <span class="option-label">${opt}</span>
+                        <span class="option-text">${question[optionKey]}</span>
+                    </label>
+                `;
+            }).join('');
+
+            document.getElementById('options-list').innerHTML = optionsHtml;
+
+            // Update navigation buttons
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            const submitBtn = document.getElementById('submit-btn');
+
+            if (allowBackNavigation) {
+                prevBtn.disabled = currentIndex === 0;
+                prevBtn.classList.remove('hidden');
+            }
+
+            if (currentIndex === total - 1) {
+                nextBtn.classList.add('hidden');
+                submitBtn.classList.remove('hidden');
+            } else {
+                nextBtn.classList.remove('hidden');
+                submitBtn.classList.add('hidden');
+            }
+        }
+
+        function selectOption(option) {
+            const question = questions[currentIndex];
+            responses[question.id] = option;
+
+            // Update UI
+            document.querySelectorAll('.option-item').forEach(item => {
+                item.classList.remove('selected');
+                if (item.querySelector('input').value === option) {
+                    item.classList.add('selected');
+                }
+            });
+
+            updateIndicators();
+
+            // Save to localStorage via API
+            api.saveAnswer(sessionToken, question.id, option);
+        }
+
+        function previousQuestion() {
+            if (currentIndex > 0 && allowBackNavigation) {
+                currentIndex--;
+                renderQuestion();
+                updateIndicators();
+            }
+        }
+
+        function nextQuestion() {
+            if (currentIndex < questions.length - 1) {
+                currentIndex++;
+                renderQuestion();
+                updateIndicators();
+            }
+        }
+
+        function goToQuestion(index) {
+            if (index >= 0 && index < questions.length) {
+                if (allowBackNavigation || index > currentIndex) {
+                    currentIndex = index;
+                    renderQuestion();
+                    updateIndicators();
+                }
+            }
+        }
+
+        function startTimer() {
+            updateTimerDisplay();
+            timerInterval = setInterval(() => {
+                remainingSeconds--;
+
+                if (remainingSeconds <= 0) {
+                    clearInterval(timerInterval);
+                    document.getElementById('timeout-modal').classList.add('active');
+                } else {
+                    updateTimerDisplay();
+
+                    // Warning when less than 5 minutes
+                    if (remainingSeconds <= 300) {
+                        document.getElementById('timer').classList.add('warning');
+                    }
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const hours = Math.floor(remainingSeconds / 3600);
+            const minutes = Math.floor((remainingSeconds % 3600) / 60);
+            const seconds = remainingSeconds % 60;
+
+            let display = '';
+            if (hours > 0) {
+                display = `${hours.toString().padStart(2, '0')}:`;
+            }
+            display += `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+            document.getElementById('timer').textContent = display;
+        }
+
+        function submitExam() {
+            const answered = Object.keys(responses).length;
+            const total = questions.length;
+            const unanswered = total - answered;
+
+            document.getElementById('submit-stats').innerHTML =
+                `You have answered <strong>${answered}</strong> out of <strong>${total}</strong> questions.` +
+                (unanswered > 0 ? `<br><span class="text-warning">${unanswered} questions unanswered.</span>` : '');
+
+            document.getElementById('submit-modal').classList.add('active');
+        }
+
+        function closeSubmitModal() {
+            document.getElementById('submit-modal').classList.remove('active');
+        }
+
+        function confirmSubmit() {
+            clearInterval(timerInterval);
+
+            // Submit via client-side API
+            const result = api.submitExam(sessionToken);
+
+            if (result.success) {
+                // Keep session token for result viewing
+                const token = sessionStorage.getItem('sessionToken');
+                sessionStorage.clear();
+                sessionStorage.setItem('sessionToken', token);
+
+                window.location.href = 'submitted.html';
+            } else {
+                alert(result.message || 'Failed to submit exam');
+            }
+        }
+
+        // Prevent accidental page leave
+        window.onbeforeunload = function() {
+            return "Are you sure you want to leave? Your progress may be lost.";
+        };
+
+        // Initialize
+        initExam();
+    </script>
+</body>
+</html>

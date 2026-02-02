@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Admin Panel</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="dashboard.html" class="navbar-brand">MCQ Admin</a>
+        <ul class="navbar-nav">
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="exams.html">Exams</a></li>
+            <li><a href="results.html">Results</a></li>
+            <li><a href="settings.html" class="active">Settings</a></li>
+            <li><a href="#" onclick="logout()">Logout</a></li>
+        </ul>
+    </nav>
+
+    <div class="container" style="max-width: 700px;">
+        <!-- Portal Branding Section -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Portal Branding</h2>
+            </div>
+
+            <div id="branding-alert"></div>
+
+            <form id="branding-form">
+                <div class="form-group">
+                    <label class="form-label">Portal Title</label>
+                    <input type="text" class="form-control" id="portal_title" placeholder="Exam Portal">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Portal Subtitle</label>
+                    <input type="text" class="form-control" id="portal_subtitle" placeholder="Enter your details to begin">
+                </div>
+
+                <hr style="margin: 1.5rem 0; border-color: #e7e5e4;">
+
+                <div class="form-group">
+                    <label class="form-label">Company Name</label>
+                    <input type="text" class="form-control" id="company_name" placeholder="Your Company Name">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Company Logo</label>
+                    <div class="logo-upload-area" id="company-logo-area">
+                        <input type="file" id="company_logo_file" accept="image/*" style="display: none;">
+                        <div id="company-logo-preview" class="logo-preview"></div>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('company_logo_file').click()">Upload Logo</button>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="clearLogo('company')" id="clear-company-logo" style="display: none;">Remove</button>
+                    </div>
+                    <input type="hidden" id="company_logo">
+                    <p class="text-muted" style="font-size: 12px; margin-top: 6px;">Logo will be stored as base64 in localStorage</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Company Website</label>
+                    <input type="url" class="form-control" id="company_website" placeholder="https://yourcompany.com">
+                </div>
+
+                <hr style="margin: 1.5rem 0; border-color: #e7e5e4;">
+
+                <div class="form-group">
+                    <label class="form-label">Footer Text</label>
+                    <input type="text" class="form-control" id="footer_text" placeholder="Powered by Your Company">
+                </div>
+
+                <button type="submit" class="btn btn-primary">Save Branding</button>
+            </form>
+        </div>
+
+        <!-- Password Section -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Settings</h2>
+            </div>
+
+            <div id="alert-container"></div>
+
+            <h3 class="mb-3">Change Password</h3>
+
+            <form id="password-form">
+                <div class="form-group">
+                    <label class="form-label" for="currentPassword">Current Password</label>
+                    <input type="password" class="form-control" id="currentPassword" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="newPassword">New Password</label>
+                    <input type="password" class="form-control" id="newPassword" required minlength="6">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="confirmPassword">Confirm New Password</label>
+                    <input type="password" class="form-control" id="confirmPassword" required minlength="6">
+                </div>
+
+                <button type="submit" class="btn btn-primary">Update Password</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">About</h3>
+            </div>
+            <p><strong>MCQ Exam Platform</strong> (Static Version)</p>
+            <p class="text-muted">A simple and powerful platform for conducting MCQ-based examinations. This is the static version that runs entirely in the browser using localStorage.</p>
+            <p class="text-muted mt-3">Features:</p>
+            <ul class="text-muted">
+                <li>Create and manage multiple exams</li>
+                <li>Flexible result visibility modes</li>
+                <li>Timer and auto-submit functionality</li>
+                <li>Detailed analytics and exports</li>
+                <li>Prevent duplicate attempts</li>
+                <li>No server required - runs on GitHub Pages</li>
+            </ul>
+            <p class="text-warning mt-3" style="font-size: 13px;">
+                <strong>Note:</strong> Data is stored in your browser's localStorage. Clearing browser data will erase all exams, questions, and results.
+            </p>
+        </div>
+    </div>
+
+    <style>
+        .logo-upload-area {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: #fafaf9;
+            border: 1px dashed #d6d3d1;
+            border-radius: 6px;
+        }
+        .logo-preview {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fff;
+            border: 1px solid #e7e5e4;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .logo-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .logo-preview:empty {
+            background: #f5f5f4;
+        }
+    </style>
+
+    <!-- Load JS modules -->
+    <script src="../js/utils.js"></script>
+    <script src="../js/storage.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/api.js"></script>
+
+    <script>
+        // Require authentication
+        if (!auth.requireAuth()) {
+            // Will redirect to login
+        }
+
+        function logout() {
+            auth.logout();
+            window.location.href = 'index.html';
+        }
+
+        // Load existing branding settings
+        function loadBrandingSettings() {
+            const settings = api.getSettings();
+
+            document.getElementById('portal_title').value = settings.portal_title || '';
+            document.getElementById('portal_subtitle').value = settings.portal_subtitle || '';
+            document.getElementById('company_name').value = settings.company_name || '';
+            document.getElementById('company_logo').value = settings.company_logo || '';
+            document.getElementById('company_website').value = settings.company_website || '';
+            document.getElementById('footer_text').value = settings.footer_text || '';
+
+            // Show logo preview
+            if (settings.company_logo) {
+                document.getElementById('company-logo-preview').innerHTML = `<img src="${settings.company_logo}" alt="Company Logo">`;
+                document.getElementById('clear-company-logo').style.display = 'inline-block';
+            }
+        }
+
+        // Handle logo file uploads - convert to base64
+        document.getElementById('company_logo_file').addEventListener('change', function(e) {
+            if (e.target.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const base64 = event.target.result;
+                    document.getElementById('company_logo').value = base64;
+                    document.getElementById('company-logo-preview').innerHTML = `<img src="${base64}" alt="Company Logo">`;
+                    document.getElementById('clear-company-logo').style.display = 'inline-block';
+                };
+                reader.readAsDataURL(e.target.files[0]);
+            }
+        });
+
+        function clearLogo(type) {
+            document.getElementById(type + '_logo').value = '';
+            document.getElementById(type + '-logo-preview').innerHTML = '';
+            document.getElementById('clear-' + type + '-logo').style.display = 'none';
+        }
+
+        // Handle branding form submission
+        document.getElementById('branding-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const data = {
+                portal_title: document.getElementById('portal_title').value.trim(),
+                portal_subtitle: document.getElementById('portal_subtitle').value.trim(),
+                company_name: document.getElementById('company_name').value.trim(),
+                company_logo: document.getElementById('company_logo').value.trim(),
+                company_website: document.getElementById('company_website').value.trim(),
+                footer_text: document.getElementById('footer_text').value.trim()
+            };
+
+            const result = api.updateSettings(data);
+            const alertContainer = document.getElementById('branding-alert');
+
+            if (result.success) {
+                alertContainer.innerHTML = '<div class="alert alert-success">Branding settings saved successfully!</div>';
+            } else {
+                alertContainer.innerHTML = `<div class="alert alert-danger">${result.message}</div>`;
+            }
+
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 3000);
+        });
+
+        // Load branding settings on page load
+        loadBrandingSettings();
+
+        document.getElementById('password-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const alertContainer = document.getElementById('alert-container');
+
+            if (newPassword !== confirmPassword) {
+                alertContainer.innerHTML = '<div class="alert alert-danger">New passwords do not match</div>';
+                return;
+            }
+
+            if (newPassword.length < 6) {
+                alertContainer.innerHTML = '<div class="alert alert-danger">Password must be at least 6 characters</div>';
+                return;
+            }
+
+            const result = await auth.changePassword(currentPassword, newPassword);
+
+            if (result.success) {
+                alertContainer.innerHTML = '<div class="alert alert-success">Password updated successfully!</div>';
+                document.getElementById('password-form').reset();
+            } else {
+                alertContainer.innerHTML = `<div class="alert alert-danger">${result.message}</div>`;
+            }
+
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 3000);
+        });
+    </script>
+</body>
+</html>

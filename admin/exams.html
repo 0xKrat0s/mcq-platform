@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Exams - Admin Panel</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="dashboard.html" class="navbar-brand">MCQ Admin</a>
+        <ul class="navbar-nav">
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="exams.html" class="active">Exams</a></li>
+            <li><a href="results.html">Results</a></li>
+            <li><a href="settings.html">Settings</a></li>
+            <li><a href="#" onclick="logout()">Logout</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Manage Exams</h2>
+                <button class="btn btn-primary" onclick="openCreateModal()">Create Exam</button>
+            </div>
+
+            <div id="alert-container"></div>
+
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Code</th>
+                            <th>Duration</th>
+                            <th>Questions</th>
+                            <th>Submissions</th>
+                            <th>Result Mode</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exams-table">
+                        <tr>
+                            <td colspan="8" class="text-center text-muted">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Exam Modal -->
+    <div class="modal-overlay" id="exam-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modal-title">Create Exam</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+
+            <form id="exam-form">
+                <input type="hidden" id="exam-id">
+
+                <div class="form-group">
+                    <label class="form-label" for="title">Exam Title *</label>
+                    <input type="text" class="form-control" id="title" required placeholder="e.g., Java Fundamentals Test">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="exam_code">Exam Code *</label>
+                        <input type="text" class="form-control" id="exam_code" required placeholder="e.g., JAVA-TEST-01" style="text-transform: uppercase;">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="duration_minutes">Duration (minutes) *</label>
+                        <input type="number" class="form-control" id="duration_minutes" value="30" min="1" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="description">Description</label>
+                    <textarea class="form-control" id="description" rows="2" placeholder="Brief description of the exam"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="marks_per_question">Default Marks/Question</label>
+                        <input type="number" class="form-control" id="marks_per_question" value="1" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="negative_marking">Negative Marking</label>
+                        <input type="number" class="form-control" id="negative_marking" value="0" min="0" step="0.25">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="result_mode">Result Visibility Mode *</label>
+                    <select class="form-control" id="result_mode">
+                        <option value="admin_only">Admin Only - Only admin can see results</option>
+                        <option value="private">Private - Only the candidate can see their score</option>
+                        <option value="public">Public Leaderboard - Everyone can see scores</option>
+                        <option value="after_publish">Publish Later - Show after admin publishes</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Options</label>
+                    <div class="form-check">
+                        <input type="checkbox" id="allow_back_navigation" checked>
+                        <label for="allow_back_navigation">Allow back navigation (previous button)</label>
+                    </div>
+                    <div class="form-check">
+                        <input type="checkbox" id="shuffle_questions">
+                        <label for="shuffle_questions">Shuffle questions for each candidate</label>
+                    </div>
+                    <div class="form-check">
+                        <input type="checkbox" id="prevent_duplicate_attempts" checked>
+                        <label for="prevent_duplicate_attempts">Prevent duplicate attempts (same email)</label>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="submit-btn">Create Exam</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="delete-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Delete Exam</h3>
+                <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+            </div>
+            <p>Are you sure you want to delete this exam? This will also delete all questions and candidate responses.</p>
+            <p class="text-danger"><strong>This action cannot be undone.</strong></p>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeDeleteModal()">Cancel</button>
+                <button class="btn btn-danger" id="confirm-delete-btn">Delete Exam</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load JS modules -->
+    <script src="../js/utils.js"></script>
+    <script src="../js/storage.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/api.js"></script>
+
+    <script>
+        // Require authentication
+        if (!auth.requireAuth()) {
+            // Will redirect to login
+        }
+
+        function logout() {
+            auth.logout();
+            window.location.href = 'index.html';
+        }
+
+        let exams = [];
+        let editingId = null;
+        let deletingId = null;
+
+        function loadExams() {
+            exams = api.getExams();
+            renderExams();
+        }
+
+        function renderExams() {
+            const tbody = document.getElementById('exams-table');
+
+            if (exams.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No exams created yet. Click "Create Exam" to get started.</td></tr>';
+                return;
+            }
+
+            const resultModeLabels = {
+                'admin_only': 'Admin Only',
+                'private': 'Private',
+                'public': 'Public',
+                'after_publish': 'After Publish'
+            };
+
+            tbody.innerHTML = exams.map(exam => `
+                <tr>
+                    <td><strong>${MCQUtils.escapeHtml(exam.title)}</strong></td>
+                    <td><code>${exam.exam_code}</code></td>
+                    <td>${exam.duration_minutes} min</td>
+                    <td>${exam.question_count}</td>
+                    <td>${exam.submission_count}</td>
+                    <td>
+                        <span class="badge badge-info">${resultModeLabels[exam.result_mode]}</span>
+                        ${exam.result_mode === 'after_publish' ?
+                            (exam.results_published ? '<span class="badge badge-success">Published</span>' : '<span class="badge badge-warning">Not Published</span>')
+                            : ''}
+                    </td>
+                    <td>
+                        <span class="badge ${exam.is_active ? 'badge-success' : 'badge-danger'}">
+                            ${exam.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                    </td>
+                    <td class="actions">
+                        <a href="questions.html?id=${exam.id}" class="btn btn-sm btn-outline">Questions</a>
+                        <button class="btn btn-sm btn-outline" onclick="editExam(${exam.id})">Edit</button>
+                        <button class="btn btn-sm ${exam.is_active ? 'btn-warning' : 'btn-success'}" onclick="toggleActive(${exam.id})">
+                            ${exam.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="confirmDelete(${exam.id})">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function openCreateModal() {
+            editingId = null;
+            document.getElementById('modal-title').textContent = 'Create Exam';
+            document.getElementById('submit-btn').textContent = 'Create Exam';
+            document.getElementById('exam-form').reset();
+            document.getElementById('allow_back_navigation').checked = true;
+            document.getElementById('prevent_duplicate_attempts').checked = true;
+            document.getElementById('exam-modal').classList.add('active');
+        }
+
+        function editExam(id) {
+            const exam = exams.find(e => e.id === id);
+            if (!exam) return;
+
+            editingId = id;
+            document.getElementById('modal-title').textContent = 'Edit Exam';
+            document.getElementById('submit-btn').textContent = 'Update Exam';
+
+            document.getElementById('exam-id').value = exam.id;
+            document.getElementById('title').value = exam.title;
+            document.getElementById('exam_code').value = exam.exam_code;
+            document.getElementById('duration_minutes').value = exam.duration_minutes;
+            document.getElementById('description').value = exam.description || '';
+            document.getElementById('marks_per_question').value = exam.marks_per_question;
+            document.getElementById('negative_marking').value = exam.negative_marking;
+            document.getElementById('result_mode').value = exam.result_mode;
+            document.getElementById('allow_back_navigation').checked = exam.allow_back_navigation;
+            document.getElementById('shuffle_questions').checked = exam.shuffle_questions;
+            document.getElementById('prevent_duplicate_attempts').checked = exam.prevent_duplicate_attempts;
+
+            document.getElementById('exam-modal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('exam-modal').classList.remove('active');
+        }
+
+        document.getElementById('exam-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const data = {
+                title: document.getElementById('title').value,
+                exam_code: document.getElementById('exam_code').value,
+                duration_minutes: parseInt(document.getElementById('duration_minutes').value),
+                description: document.getElementById('description').value,
+                marks_per_question: parseInt(document.getElementById('marks_per_question').value),
+                negative_marking: parseFloat(document.getElementById('negative_marking').value),
+                result_mode: document.getElementById('result_mode').value,
+                allow_back_navigation: document.getElementById('allow_back_navigation').checked,
+                shuffle_questions: document.getElementById('shuffle_questions').checked,
+                prevent_duplicate_attempts: document.getElementById('prevent_duplicate_attempts').checked,
+                is_active: true
+            };
+
+            let result;
+            if (editingId) {
+                result = api.updateExam(editingId, data);
+            } else {
+                result = api.createExam(data);
+            }
+
+            if (result.success) {
+                closeModal();
+                loadExams();
+                showAlert('success', editingId ? 'Exam updated successfully!' : 'Exam created successfully!');
+            } else {
+                showAlert('danger', result.message);
+            }
+        });
+
+        function toggleActive(id) {
+            const result = api.toggleExamActive(id);
+            if (result.success) {
+                loadExams();
+            }
+        }
+
+        function confirmDelete(id) {
+            deletingId = id;
+            document.getElementById('delete-modal').classList.add('active');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-modal').classList.remove('active');
+        }
+
+        document.getElementById('confirm-delete-btn').addEventListener('click', function() {
+            if (!deletingId) return;
+
+            const result = api.deleteExam(deletingId);
+            if (result.success) {
+                closeDeleteModal();
+                loadExams();
+                showAlert('success', 'Exam deleted successfully!');
+            }
+        });
+
+        function showAlert(type, message) {
+            const container = document.getElementById('alert-container');
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 5000);
+        }
+
+        loadExams();
+    </script>
+</body>
+</html>

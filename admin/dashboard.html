@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Admin Panel</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="dashboard.html" class="navbar-brand">MCQ Admin</a>
+        <ul class="navbar-nav">
+            <li><a href="dashboard.html" class="active">Dashboard</a></li>
+            <li><a href="exams.html">Exams</a></li>
+            <li><a href="results.html">Results</a></li>
+            <li><a href="settings.html">Settings</a></li>
+            <li><a href="#" onclick="logout()">Logout</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <h1 class="mb-4">Dashboard</h1>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon" style="background: #eff6ff; color: #2563eb;">&#128221;</div>
+                <div class="stat-value" id="total-exams">0</div>
+                <div class="stat-label">Total Exams</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: #f0fdf4; color: #16a34a;">&#10003;</div>
+                <div class="stat-value" id="active-exams">0</div>
+                <div class="stat-label">Active Exams</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: #fffbeb; color: #d97706;">?</div>
+                <div class="stat-value" id="total-questions">0</div>
+                <div class="stat-label">Total Questions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon" style="background: #f5f5f4; color: #57534e;">&#128101;</div>
+                <div class="stat-value" id="total-submissions">0</div>
+                <div class="stat-label">Submissions</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Recent Exams</h3>
+                <a href="exams.html" class="btn btn-primary btn-sm">View All</a>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Code</th>
+                            <th>Submissions</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-exams">
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Quick Actions</h3>
+            </div>
+            <div class="d-flex gap-2" style="flex-wrap: wrap;">
+                <a href="exams.html" class="btn btn-primary">New Exam</a>
+                <a href="results.html" class="btn btn-outline">All Results</a>
+                <a href="../leaderboard.html" target="_blank" class="btn btn-outline">Leaderboard</a>
+                <a href="../index.html" target="_blank" class="btn btn-outline">User Portal</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load JS modules -->
+    <script src="../js/utils.js"></script>
+    <script src="../js/storage.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/api.js"></script>
+
+    <script>
+        // Require authentication
+        if (!auth.requireAuth()) {
+            // Will redirect to login
+        }
+
+        function logout() {
+            auth.logout();
+            window.location.href = 'index.html';
+        }
+
+        function loadDashboard() {
+            const data = api.getDashboardStats();
+
+            document.getElementById('total-exams').textContent = data.totalExams;
+            document.getElementById('active-exams').textContent = data.activeExams;
+            document.getElementById('total-questions').textContent = data.totalQuestions;
+            document.getElementById('total-submissions').textContent = data.totalSubmissions;
+
+            const tbody = document.getElementById('recent-exams');
+
+            if (data.recentExams.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No exams created yet</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.recentExams.map(exam => `
+                <tr>
+                    <td><strong>${MCQUtils.escapeHtml(exam.title)}</strong></td>
+                    <td><code>${exam.exam_code}</code></td>
+                    <td>${exam.submission_count}</td>
+                    <td>
+                        <span class="badge ${exam.is_active ? 'badge-success' : 'badge-danger'}">
+                            ${exam.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                    </td>
+                    <td class="actions">
+                        <a href="questions.html?id=${exam.id}" class="btn btn-sm btn-outline">Questions</a>
+                        <a href="exam-results.html?id=${exam.id}" class="btn btn-sm btn-outline">Results</a>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        loadDashboard();
+    </script>
+</body>
+</html>

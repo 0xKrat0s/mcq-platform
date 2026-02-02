@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Results Overview - Admin Panel</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="dashboard.html" class="navbar-brand">MCQ Admin</a>
+        <ul class="navbar-nav">
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="exams.html">Exams</a></li>
+            <li><a href="results.html" class="active">Results</a></li>
+            <li><a href="settings.html">Settings</a></li>
+            <li><a href="#" onclick="logout()">Logout</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Results Overview</h2>
+            </div>
+
+            <p class="text-muted mb-4">Select an exam to view detailed results and manage candidate submissions.</p>
+
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Exam Title</th>
+                            <th>Code</th>
+                            <th>Submissions</th>
+                            <th>Result Mode</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exams-table">
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load JS modules -->
+    <script src="../js/utils.js"></script>
+    <script src="../js/storage.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/api.js"></script>
+
+    <script>
+        // Require authentication
+        if (!auth.requireAuth()) {
+            // Will redirect to login
+        }
+
+        function logout() {
+            auth.logout();
+            window.location.href = 'index.html';
+        }
+
+        function loadExams() {
+            const exams = api.getExams();
+            const tbody = document.getElementById('exams-table');
+
+            if (exams.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No exams found</td></tr>';
+                return;
+            }
+
+            const resultModeLabels = {
+                'admin_only': 'Admin Only',
+                'private': 'Private',
+                'public': 'Public',
+                'after_publish': 'After Publish'
+            };
+
+            tbody.innerHTML = exams.map(exam => `
+                <tr>
+                    <td><strong>${MCQUtils.escapeHtml(exam.title)}</strong></td>
+                    <td><code>${exam.exam_code}</code></td>
+                    <td>${exam.submission_count}</td>
+                    <td>
+                        <span class="badge badge-info">${resultModeLabels[exam.result_mode]}</span>
+                        ${exam.result_mode === 'after_publish' ?
+                            (exam.results_published ? '<span class="badge badge-success">Published</span>' : '<span class="badge badge-warning">Not Published</span>')
+                            : ''}
+                    </td>
+                    <td class="actions">
+                        <a href="exam-results.html?id=${exam.id}" class="btn btn-sm btn-primary">View Results</a>
+                        ${exam.result_mode === 'after_publish' ?
+                            (exam.results_published ?
+                                `<button class="btn btn-sm btn-warning" onclick="unpublishResults(${exam.id})">Unpublish</button>` :
+                                `<button class="btn btn-sm btn-success" onclick="publishResults(${exam.id})">Publish Results</button>`)
+                            : ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function publishResults(examId) {
+            api.publishResults(examId);
+            loadExams();
+        }
+
+        function unpublishResults(examId) {
+            api.unpublishResults(examId);
+            loadExams();
+        }
+
+        loadExams();
+    </script>
+</body>
+</html>

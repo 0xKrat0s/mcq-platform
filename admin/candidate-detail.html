@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candidate Detail - Admin Panel</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="dashboard.html" class="navbar-brand">MCQ Admin</a>
+        <ul class="navbar-nav">
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="exams.html">Exams</a></li>
+            <li><a href="results.html" class="active">Results</a></li>
+            <li><a href="settings.html">Settings</a></li>
+            <li><a href="#" onclick="logout()">Logout</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <a href="javascript:history.back()" class="text-muted">&larr; Back</a>
+                    <h2 class="card-title mt-2" id="candidate-name">Loading...</h2>
+                    <p class="text-muted" id="exam-info"></p>
+                </div>
+            </div>
+
+            <div class="stats-grid mb-4">
+                <div class="stat-card">
+                    <div class="stat-value" id="score-display">0/0</div>
+                    <div class="stat-label">Final Score</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="percentage-display">0%</div>
+                    <div class="stat-label">Percentage</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="correct-count">0</div>
+                    <div class="stat-label">Correct Answers</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="wrong-count">0</div>
+                    <div class="stat-label">Wrong Answers</div>
+                </div>
+            </div>
+
+            <h3 class="mb-3">Response Details</h3>
+
+            <div id="responses-list">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load JS modules -->
+    <script src="../js/utils.js"></script>
+    <script src="../js/storage.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/api.js"></script>
+
+    <script>
+        // Require authentication
+        if (!auth.requireAuth()) {
+            // Will redirect to login
+        }
+
+        function logout() {
+            auth.logout();
+            window.location.href = 'index.html';
+        }
+
+        // Get candidate ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const candidateId = parseInt(urlParams.get('id'));
+
+        if (!candidateId) {
+            window.location.href = 'results.html';
+        }
+
+        function loadCandidateDetail() {
+            const data = api.getCandidateDetail(candidateId);
+
+            if (!data.success) {
+                alert('Candidate not found');
+                window.location.href = 'results.html';
+                return;
+            }
+
+            const { candidate, responses } = data;
+
+            document.getElementById('candidate-name').textContent = candidate.name;
+            document.getElementById('exam-info').textContent = `${candidate.exam_title} (${candidate.exam_code})`;
+            document.title = `${candidate.name} - Results`;
+
+            const percentage = candidate.total_marks > 0
+                ? ((candidate.score / candidate.total_marks) * 100).toFixed(1)
+                : 0;
+
+            document.getElementById('score-display').textContent = `${candidate.score}/${candidate.total_marks}`;
+            document.getElementById('percentage-display').textContent = `${percentage}%`;
+
+            const correct = responses.filter(r => r.is_correct).length;
+            const wrong = responses.filter(r => r.selected_option && !r.is_correct).length;
+            const unanswered = responses.filter(r => !r.selected_option).length;
+
+            document.getElementById('correct-count').textContent = correct;
+            document.getElementById('wrong-count').textContent = `${wrong} (${unanswered} skipped)`;
+
+            renderResponses(responses);
+        }
+
+        function renderResponses(responses) {
+            const container = document.getElementById('responses-list');
+
+            if (responses.length === 0) {
+                container.innerHTML = '<p class="text-muted">No responses recorded.</p>';
+                return;
+            }
+
+            container.innerHTML = responses.map((r, index) => {
+                const options = ['A', 'B', 'C', 'D'];
+
+                return `
+                    <div class="card" style="margin-bottom: 15px;">
+                        <div class="d-flex justify-between align-center mb-3">
+                            <div>
+                                <span class="badge badge-info">Question ${index + 1}</span>
+                                ${r.is_correct ?
+                                    '<span class="badge badge-success">Correct</span>' :
+                                    r.selected_option ?
+                                        '<span class="badge badge-danger">Wrong</span>' :
+                                        '<span class="badge badge-warning">Skipped</span>'
+                                }
+                            </div>
+                            <span class="text-muted">${r.marks_obtained}/${r.marks} marks</span>
+                        </div>
+                        <p style="font-weight: 500; margin-bottom: 15px;">${MCQUtils.escapeHtml(r.question_text)}</p>
+                        <div style="display: grid; gap: 8px;">
+                            ${options.map(opt => {
+                                const optionKey = `option_${opt.toLowerCase()}`;
+                                const isCorrect = r.correct_option === opt;
+                                const isSelected = r.selected_option === opt;
+
+                                let style = 'background: #f3f4f6;';
+                                if (isCorrect) {
+                                    style = 'background: #d1fae5; border: 1px solid #10b981;';
+                                } else if (isSelected && !isCorrect) {
+                                    style = 'background: #fee2e2; border: 1px solid #ef4444;';
+                                }
+
+                                return `
+                                    <div style="padding: 10px; border-radius: 6px; ${style}">
+                                        <strong>${opt}.</strong> ${MCQUtils.escapeHtml(r[optionKey])}
+                                        ${isCorrect ? ' &#10004; <span class="text-success">(Correct)</span>' : ''}
+                                        ${isSelected && !isCorrect ? ' &#10008; <span class="text-danger">(Selected)</span>' : ''}
+                                        ${isSelected && isCorrect ? ' <span class="text-success">(Selected)</span>' : ''}
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        loadCandidateDetail();
+    </script>
+</body>
+</html>
